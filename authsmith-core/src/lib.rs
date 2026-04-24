@@ -57,6 +57,10 @@ pub struct AuthUser {
     /// Arbitrary app-specific JSON (e.g. realtor licence #, NMLS number).
     pub metadata: serde_json::Value,
     pub email_verified: bool,
+    /// When `true` the user is prevented from creating new sessions.
+    /// Set via [`AuthEngine::ban_user`].
+    #[serde(default)]
+    pub banned: bool,
     /// Unix timestamp (seconds).
     pub created_at: i64,
     /// Unix timestamp (seconds).
@@ -221,6 +225,13 @@ impl Session {
 pub struct SessionMeta {
     pub ip_address: Option<String>,
     pub user_agent: Option<String>,
+    /// Tenant scope for this session.
+    ///
+    /// When `None`, [`AuthEngine::create_session`] automatically inherits
+    /// the tenant from the owning [`AuthUser::tenant_id`]. Set explicitly
+    /// only when you need to override the user's default tenant.
+    #[serde(default)]
+    pub tenant_id: Option<String>,
 }
 
 /// Input required to register a new user account.
@@ -593,6 +604,8 @@ pub trait AuthProvider: Send + Sync {
     async fn find_user_by_email(&self, email: &str) -> Result<Option<AuthUser>, Self::Error>;
     async fn update_user(&self, user: AuthUser) -> Result<AuthUser, Self::Error>;
     async fn delete_user(&self, id: &str) -> Result<(), Self::Error>;
+    /// Return all users — used by the admin dashboard and audit tooling.
+    async fn list_users(&self) -> Result<Vec<AuthUser>, Self::Error>;
 }
 
 /// Implement this trait to connect any session-storage backend.
@@ -617,6 +630,10 @@ pub trait SessionProvider: Send + Sync {
     /// dashboards, and audit views). Implementations should return both active
     /// and expired sessions or only unexpired ones — document which.
     async fn list_sessions_for_user(&self, user_id: &str) -> Result<Vec<Session>, Self::Error>;
+    /// Return every active session across all users — admin dashboard only.
+    ///
+    /// Implementations may limit results to non-expired sessions for efficiency.
+    async fn list_all_sessions(&self) -> Result<Vec<Session>, Self::Error>;
 }
 
 /// Lifecycle hooks — register multiple plugins on a single engine.

@@ -321,6 +321,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             SessionMeta {
                 ip_address: client_ip,
                 user_agent: client_ua,
+                tenant_id: None,
             },
         )
         .await?;

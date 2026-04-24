@@ -70,16 +70,26 @@ where
     /// # Errors
     /// Returns [`AuthError::EmailNotVerified`] if `require_email_verification`
     /// is set and the user's email is unverified.
+    /// Returns [`AuthError::Forbidden`] if the user account is banned.
     pub async fn create_session(
         &self,
         user: &AuthUser,
         meta: SessionMeta,
     ) -> Result<Session, AuthError> {
+        if user.banned {
+            return Err(AuthError::Forbidden("account is banned".to_owned()));
+        }
         if self.config.require_email_verification && !user.email_verified {
             return Err(AuthError::EmailNotVerified);
         }
 
         let expires_at = now_secs() + self.config.session_ttl_secs;
+
+        // Inherit the user's tenant scope when the caller didn't specify one.
+        let meta = SessionMeta {
+            tenant_id: meta.tenant_id.or_else(|| user.tenant_id.clone()),
+            ..meta
+        };
 
         let session = self
             .session_provider
@@ -178,6 +188,56 @@ where
             .list_sessions_for_user(user_id)
             .await
             .map_err(|e| AuthError::Provider(Box::new(e)))
+    }
+
+    /// List all active sessions across every user — admin dashboard only.
+    pub async fn list_all_sessions(&self) -> Result<Vec<Session>, AuthError> {
+        self.session_provider
+            .list_all_sessions()
+            .await
+            .map_err(|e| AuthError::Provider(Box::new(e)))
+    }
+
+    /// List every user in the system — admin dashboard only.
+    pub async fn list_all_users(&self) -> Result<Vec<AuthUser>, AuthError> {
+        self.user_provider
+            .list_users()
+            .await
+            .map_err(|e| AuthError::Provider(Box::new(e)))
+    }
+
+    /// Ban a user: set their `banned` flag and fire `on_user_banned` on all plugins.
+    ///
+    /// Banned users are rejected by [`AuthEngine::create_session`] so they
+    /// cannot obtain new sessions. Existing sessions remain valid until they
+    /// expire or are individually revoked.
+    ///
+    /// # Errors
+    /// Returns [`AuthError::UserNotFound`] if no user with `user_id` exists.
+    pub async fn ban_user(&self, user_id: &str) -> Result<AuthUser, AuthError> {
+        let mut user = self
+            .user_provider
+            .find_user_by_id(user_id)
+            .await
+            .map_err(|e| AuthError::Provider(Box::new(e)))?
+            .ok_or(AuthError::UserNotFound)?;
+
+        user.banned = true;
+
+        let user = self
+            .user_provider
+            .update_user(user)
+            .await
+            .map_err(|e| AuthError::Provider(Box::new(e)))?;
+
+        for plugin in &self.plugins {
+            plugin
+                .on_user_banned(&user)
+                .await
+                .map_err(AuthError::Plugin)?;
+        }
+
+        Ok(user)
     }
 
     // ── Convenience operations ────────────────────────────────────────────────
@@ -285,6 +345,7 @@ where
         let meta = SessionMeta {
             ip_address: old.ip_address.clone(),
             user_agent: old.user_agent.clone(),
+            tenant_id: old.tenant_id.clone(),
         };
         let expires_at = now_secs() + self.config.session_ttl_secs;
 

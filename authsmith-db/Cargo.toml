@@ -19,6 +19,6 @@ tracing           = { workspace = true }
 sqlx              = { workspace = true }
 
 [features]
-default  = []
+default  = ["postgres"]
 sqlite   = ["sqlx/sqlite"]
 postgres = ["sqlx/postgres"]

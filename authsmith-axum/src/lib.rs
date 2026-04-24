@@ -9,6 +9,8 @@
 //! 2. In handlers, use `AuthSession` to extract the user (401 if absent) or
 //!    `OptionalAuthSession` for guest-friendly routes.
 //! 3. Use `require_role` as a layer on specific routes for role gating.
+//! 4. Optionally, enable the `admin` feature and call [`admin::admin_router`]
+//!    to mount the dashboard-compatible admin API.
 //!
 //! ```rust,ignore
 //! use authsmith_axum::{auth_middleware, AuthSession, require_role};
@@ -30,6 +32,9 @@
 //!     format!("Hello, {}!", user.email.unwrap_or_default())
 //! }
 //! ```
+
+#[cfg(feature = "admin")]
+pub mod admin;
 
 use authsmith_core::{AuthEngine, AuthProvider, AuthUser, Role, SessionProvider};
 use axum::{

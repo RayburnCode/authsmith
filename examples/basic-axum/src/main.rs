@@ -139,9 +139,11 @@ impl AuthProvider for MemUserStore {
             id: self.id_gen.generate(),
             email: input.email,
             peer_id: input.peer_id,
+            tenant_id: input.tenant_id,
             roles: input.roles,
             metadata: input.metadata,
             email_verified: false,
+            banned: false,
             created_at: now,
             updated_at: now,
         };
@@ -183,6 +185,16 @@ impl AuthProvider for MemUserStore {
             .remove(id);
         Ok(())
     }
+
+    async fn list_users(&self) -> Result<Vec<AuthUser>, Self::Error> {
+        Ok(self
+            .inner
+            .lock()
+            .map_err(|_| UserStoreError::Poison)?
+            .values()
+            .map(|(u, _)| u.clone())
+            .collect())
+    }
 }
 
 // ── In-memory session store ───────────────────────────────────────────────────
@@ -211,6 +223,7 @@ impl SessionProvider for MemSessionStore {
         let session = Session {
             token: self.token_gen.generate(),
             user_id: user_id.to_string(),
+            tenant_id: meta.tenant_id,
             expires_at,
             ip_address: meta.ip_address,
             user_agent: meta.user_agent,
@@ -246,6 +259,27 @@ impl SessionProvider for MemSessionStore {
             .map_err(|_| SessionStoreError)?
             .retain(|_, s| s.user_id != user_id);
         Ok(())
+    }
+
+    async fn list_sessions_for_user(&self, user_id: &str) -> Result<Vec<Session>, Self::Error> {
+        Ok(self
+            .sessions
+            .lock()
+            .map_err(|_| SessionStoreError)?
+            .values()
+            .filter(|s| s.user_id == user_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn list_all_sessions(&self) -> Result<Vec<Session>, Self::Error> {
+        Ok(self
+            .sessions
+            .lock()
+            .map_err(|_| SessionStoreError)?
+            .values()
+            .cloned()
+            .collect())
     }
 }
 
@@ -553,7 +587,7 @@ async fn login(
     // login() = create_session() + fire on_login plugins.
     let (_, session) = state
         .auth
-        .login(&user, SessionMeta { ip_address: ip, user_agent: ua })
+        .login(&user, SessionMeta { ip_address: ip, user_agent: ua, tenant_id: None })
         .await?;
 
     Ok(Json(session.into()))

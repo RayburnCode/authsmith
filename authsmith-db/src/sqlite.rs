@@ -2,16 +2,16 @@
 //!
 //! Enable the `sqlite` feature on `authsmith-db` to activate.
 //!
-//! ## Required migrations
-//!
-//! Place the following in `migrations/0001_authsmith.sql` and run via
-//! `sqlx::migrate!()`:
+//! Migrations are bundled — call [`authsmith_db::run_sqlite_migrations`] on
+//! startup. To apply manually, place the following in
+//! `migrations/0001_authsmith_init.sql`:
 //!
 //! ```sql
 //! CREATE TABLE IF NOT EXISTS users (
 //!     id             TEXT PRIMARY KEY,
 //!     email          TEXT UNIQUE,
 //!     peer_id        TEXT,
+//!     tenant_id      TEXT,
 //!     password_hash  TEXT,
 //!     roles          TEXT NOT NULL DEFAULT '[]',
 //!     metadata       TEXT NOT NULL DEFAULT '{}',
@@ -19,10 +19,12 @@
 //!     created_at     INTEGER NOT NULL,
 //!     updated_at     INTEGER NOT NULL
 //! );
+//! CREATE INDEX IF NOT EXISTS users_tenant_id ON users(tenant_id);
 //!
 //! CREATE TABLE IF NOT EXISTS sessions (
 //!     token      TEXT PRIMARY KEY,
 //!     user_id    TEXT NOT NULL,
+//!     tenant_id  TEXT,
 //!     expires_at INTEGER NOT NULL,
 //!     ip_address TEXT,
 //!     user_agent TEXT,
@@ -30,6 +32,7 @@
 //!     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 //! );
 //! CREATE INDEX IF NOT EXISTS sessions_user_id ON sessions(user_id);
+//! CREATE INDEX IF NOT EXISTS sessions_tenant_id ON sessions(tenant_id);
 //! ```
 
 #[cfg(feature = "sqlite")]
@@ -53,9 +56,72 @@ mod inner {
         Json(#[from] serde_json::Error),
     }
 
+    // ── Row types ─────────────────────────────────────────────────────────────
+
+    /// Internal row type for user queries.
+    ///
+    /// Uses non-macro `sqlx::query_as` — no `DATABASE_URL` required at
+    /// compile time.
+    #[derive(sqlx::FromRow)]
+    struct SqliteUserRow {
+        id: String,
+        email: Option<String>,
+        peer_id: Option<String>,
+        tenant_id: Option<String>,
+        roles: String,
+        metadata: String,
+        /// SQLite stores BOOLEAN as INTEGER; sqlx decodes 0/1 → bool.
+        email_verified: bool,
+        banned: bool,
+        created_at: i64,
+        updated_at: i64,
+    }
+
+    fn row_to_user(row: SqliteUserRow) -> Result<AuthUser, SqliteError> {
+        let roles: Vec<Role> = serde_json::from_str(&row.roles)?;
+        let metadata: serde_json::Value = serde_json::from_str(&row.metadata)?;
+        Ok(AuthUser {
+            id: row.id,
+            email: row.email,
+            peer_id: row.peer_id,
+            tenant_id: row.tenant_id,
+            roles,
+            metadata,
+            email_verified: row.email_verified,
+            banned: row.banned,
+            created_at: row.created_at,
+            updated_at: row.updated_at,
+        })
+    }
+
+    #[derive(sqlx::FromRow)]
+    struct SqliteSessionRow {
+        token: String,
+        user_id: String,
+        tenant_id: Option<String>,
+        expires_at: i64,
+        ip_address: Option<String>,
+        user_agent: Option<String>,
+        created_at: i64,
+    }
+
+    fn row_to_session(row: SqliteSessionRow) -> Session {
+        Session {
+            token: row.token,
+            user_id: row.user_id,
+            tenant_id: row.tenant_id,
+            expires_at: row.expires_at,
+            ip_address: row.ip_address,
+            user_agent: row.user_agent,
+            created_at: row.created_at,
+        }
+    }
+
     // ── User store ────────────────────────────────────────────────────────────
 
     /// SQLite-backed [`AuthProvider`].
+    ///
+    /// Clone-safe — wraps a [`SqlitePool`] which is internally `Arc`-ed.
     #[derive(Clone)]
     pub struct SqliteUserStore {
         pool: SqlitePool,
@@ -65,32 +131,6 @@ mod inner {
         pub fn new(pool: SqlitePool) -> Self {
             Self { pool }
         }
-    }
-
-    struct UserRow {
-        id: String,
-        email: Option<String>,
-        peer_id: Option<String>,
-        roles: String,
-        metadata: String,
-        email_verified: i64,
-        created_at: i64,
-        updated_at: i64,
-    }
-
-    fn row_to_user(row: UserRow) -> Result<AuthUser, SqliteError> {
-        let roles: Vec<Role> = serde_json::from_str(&row.roles)?;
-        let metadata: serde_json::Value = serde_json::from_str(&row.metadata)?;
-        Ok(AuthUser {
-            id: row.id,
-            email: row.email,
-            peer_id: row.peer_id,
-            roles,
-            metadata,
-            email_verified: row.email_verified != 0,
-            created_at: row.created_at,
-            updated_at: row.updated_at,
-        })
     }
 
     #[async_trait]
@@ -104,11 +144,19 @@ mod inner {
             let roles_json = serde_json::to_string(&input.roles)?;
             let metadata_json = serde_json::to_string(&input.metadata)?;
 
-            sqlx::query!(
-                r#"INSERT INTO users (id, email, peer_id, roles, metadata, email_verified, created_at, updated_at)
-                   VALUES (?, ?, ?, ?, ?, 0, ?, ?)"#,
-                id, input.email, input.peer_id, roles_json, metadata_json, now, now
+            sqlx::query(
+                "INSERT INTO users \
+                    (id, email, peer_id, tenant_id, roles, metadata, email_verified, created_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
             )
+            .bind(&id)
+            .bind(&input.email)
+            .bind(&input.peer_id)
+            .bind(&input.tenant_id)
+            .bind(&roles_json)
+            .bind(&metadata_json)
+            .bind(now)
+            .bind(now)
             .execute(&self.pool)
             .await?;
 
@@ -119,12 +167,12 @@ mod inner {
 
         #[instrument(skip(self))]
         async fn find_user_by_id(&self, id: &str) -> Result<Option<AuthUser>, Self::Error> {
-            let row = sqlx::query_as!(
-                UserRow,
-                "SELECT id, email, peer_id, roles, metadata, email_verified, created_at, updated_at
+            let row = sqlx::query_as::<_, SqliteUserRow>(
+                "SELECT id, email, peer_id, tenant_id, roles, metadata, \
+                        email_verified, banned, created_at, updated_at \
                  FROM users WHERE id = ?",
-                id
             )
+            .bind(id)
             .fetch_optional(&self.pool)
             .await?;
 
@@ -133,12 +181,12 @@ mod inner {
 
         #[instrument(skip(self))]
         async fn find_user_by_email(&self, email: &str) -> Result<Option<AuthUser>, Self::Error> {
-            let row = sqlx::query_as!(
-                UserRow,
-                "SELECT id, email, peer_id, roles, metadata, email_verified, created_at, updated_at
+            let row = sqlx::query_as::<_, SqliteUserRow>(
+                "SELECT id, email, peer_id, tenant_id, roles, metadata, \
+                        email_verified, banned, created_at, updated_at \
                  FROM users WHERE email = ?",
-                email
             )
+            .bind(email)
             .fetch_optional(&self.pool)
             .await?;
 
@@ -150,13 +198,22 @@ mod inner {
             let roles_json = serde_json::to_string(&user.roles)?;
             let metadata_json = serde_json::to_string(&user.metadata)?;
             let now = now_secs();
-            let verified = user.email_verified as i64;
 
-            sqlx::query!(
-                r#"UPDATE users SET email = ?, peer_id = ?, roles = ?, metadata = ?,
-                   email_verified = ?, updated_at = ? WHERE id = ?"#,
-                user.email, user.peer_id, roles_json, metadata_json, verified, now, user.id
+            sqlx::query(
+                "UPDATE users \
+                 SET email = ?, peer_id = ?, tenant_id = ?, roles = ?, \
+                     metadata = ?, email_verified = ?, banned = ?, updated_at = ? \
+                 WHERE id = ?",
             )
+            .bind(&user.email)
+            .bind(&user.peer_id)
+            .bind(&user.tenant_id)
+            .bind(&roles_json)
+            .bind(&metadata_json)
+            .bind(user.email_verified)
+            .bind(user.banned)
+            .bind(now)
+            .bind(&user.id)
             .execute(&self.pool)
             .await?;
 
@@ -164,8 +221,22 @@ mod inner {
         }
 
         #[instrument(skip(self))]
+        async fn list_users(&self) -> Result<Vec<AuthUser>, Self::Error> {
+            let rows = sqlx::query_as::<_, SqliteUserRow>(
+                "SELECT id, email, peer_id, tenant_id, roles, metadata, \
+                        email_verified, banned, created_at, updated_at \
+                 FROM users ORDER BY created_at DESC",
+            )
+            .fetch_all(&self.pool)
+            .await?;
+
+            rows.into_iter().map(row_to_user).collect()
+        }
+
+        #[instrument(skip(self))]
         async fn delete_user(&self, id: &str) -> Result<(), Self::Error> {
-            sqlx::query!("DELETE FROM users WHERE id = ?", id)
+            sqlx::query("DELETE FROM users WHERE id = ?")
+                .bind(id)
                 .execute(&self.pool)
                 .await?;
             Ok(())
@@ -175,6 +246,8 @@ mod inner {
     // ── Session store ─────────────────────────────────────────────────────────
 
     /// SQLite-backed [`SessionProvider`].
+    ///
+    /// Clone-safe — wraps a [`SqlitePool`] which is internally `Arc`-ed.
     #[derive(Clone)]
     pub struct SqliteSessionStore {
         pool: SqlitePool,
@@ -204,17 +277,25 @@ mod inner {
             let token = self.token_gen.generate();
             let now = now_secs();
 
-            sqlx::query!(
-                r#"INSERT INTO sessions (token, user_id, expires_at, ip_address, user_agent, created_at)
-                   VALUES (?, ?, ?, ?, ?, ?)"#,
-                token, user_id, expires_at, meta.ip_address, meta.user_agent, now
+            sqlx::query(
+                "INSERT INTO sessions \
+                    (token, user_id, tenant_id, expires_at, ip_address, user_agent, created_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?)",
             )
+            .bind(&token)
+            .bind(user_id)
+            .bind(&meta.tenant_id)
+            .bind(expires_at)
+            .bind(&meta.ip_address)
+            .bind(&meta.user_agent)
+            .bind(now)
             .execute(&self.pool)
             .await?;
 
             Ok(Session {
                 token,
                 user_id: user_id.to_owned(),
+                tenant_id: meta.tenant_id,
                 expires_at,
                 ip_address: meta.ip_address,
                 user_agent: meta.user_agent,
@@ -224,27 +305,21 @@ mod inner {
 
         #[instrument(skip(self))]
         async fn get_session(&self, token: &str) -> Result<Option<Session>, Self::Error> {
-            let row = sqlx::query!(
-                "SELECT token, user_id, expires_at, ip_address, user_agent, created_at
+            let row = sqlx::query_as::<_, SqliteSessionRow>(
+                "SELECT token, user_id, tenant_id, expires_at, ip_address, user_agent, created_at \
                  FROM sessions WHERE token = ?",
-                token
             )
+            .bind(token)
             .fetch_optional(&self.pool)
             .await?;
 
-            Ok(row.map(|r| Session {
-                token: r.token,
-                user_id: r.user_id,
-                expires_at: r.expires_at,
-                ip_address: r.ip_address,
-                user_agent: r.user_agent,
-                created_at: r.created_at,
-            }))
+            Ok(row.map(row_to_session))
         }
 
         #[instrument(skip(self))]
         async fn revoke_session(&self, token: &str) -> Result<(), Self::Error> {
-            sqlx::query!("DELETE FROM sessions WHERE token = ?", token)
+            sqlx::query("DELETE FROM sessions WHERE token = ?")
+                .bind(token)
                 .execute(&self.pool)
                 .await?;
             Ok(())
@@ -252,10 +327,41 @@ mod inner {
 
         #[instrument(skip(self))]
         async fn revoke_all_sessions(&self, user_id: &str) -> Result<(), Self::Error> {
-            sqlx::query!("DELETE FROM sessions WHERE user_id = ?", user_id)
+            sqlx::query("DELETE FROM sessions WHERE user_id = ?")
+                .bind(user_id)
                 .execute(&self.pool)
                 .await?;
             Ok(())
+        }
+
+        #[instrument(skip(self))]
+        async fn list_sessions_for_user(
+            &self,
+            user_id: &str,
+        ) -> Result<Vec<Session>, Self::Error> {
+            let rows = sqlx::query_as::<_, SqliteSessionRow>(
+                "SELECT token, user_id, tenant_id, expires_at, ip_address, user_agent, created_at \
+                 FROM sessions WHERE user_id = ? \
+                 ORDER BY created_at DESC",
+            )
+            .bind(user_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+            Ok(rows.into_iter().map(row_to_session).collect())
+        }
+
+        #[instrument(skip(self))]
+        async fn list_all_sessions(&self) -> Result<Vec<Session>, Self::Error> {
+            let rows = sqlx::query_as::<_, SqliteSessionRow>(
+                "SELECT token, user_id, tenant_id, expires_at, ip_address, user_agent, created_at \
+                 FROM sessions \
+                 ORDER BY created_at DESC",
+            )
+            .fetch_all(&self.pool)
+            .await?;
+
+            Ok(rows.into_iter().map(row_to_session).collect())
         }
     }
 
@@ -276,9 +382,6 @@ mod inner {
         };
         format!("{ts:013X}{rand_part:016X}")
     }
-
-    // Re-export for convenience.
-    pub use self::{SqliteSessionStore, SqliteUserStore};
 }
 
 #[cfg(feature = "sqlite")]

@@ -8,12 +8,17 @@ repository.workspace = true
 homepage.workspace   = true
 readme.workspace     = true
 
+[features]
+# Enable admin API routes: GET/POST/DELETE /admin/* guarded by a bearer token.
+admin = []
+
 [dependencies]
 authsmith-core    = { workspace = true, features = ["session"] }
 axum              = { workspace = true }
 http              = { workspace = true }
 thiserror         = { workspace = true }
 serde             = { workspace = true }
+serde_json        = { workspace = true }
 async-trait       = { workspace = true }
 tokio             = { workspace = true }
 tracing           = { workspace = true }
