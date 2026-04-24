@@ -161,6 +161,158 @@ where
             .map_err(|e| AuthError::Provider(Box::new(e)))
     }
 
+    /// List all sessions for a user — powers multi-session management UIs.
+    ///
+    /// Returns every session the provider has on record for `user_id`. Whether
+    /// expired sessions are included depends on the provider implementation —
+    /// see its documentation. Active sessions can be filtered with
+    /// [`Session::is_valid`].
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let sessions = auth.list_sessions(&user.id).await?;
+    /// let active: Vec<_> = sessions.iter().filter(|s| s.is_valid(now_secs())).collect();
+    /// ```
+    pub async fn list_sessions(&self, user_id: &str) -> Result<Vec<Session>, AuthError> {
+        self.session_provider
+            .list_sessions_for_user(user_id)
+            .await
+            .map_err(|e| AuthError::Provider(Box::new(e)))
+    }
+
+    // ── Convenience operations ────────────────────────────────────────────────
+
+    /// One-shot login: create a session for an already-authenticated user and
+    /// fire `on_login` on all plugins.
+    ///
+    /// This combines [`create_session`](Self::create_session) with the email
+    /// verification guard and plugin hooks into a single ergonomic call.
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// let user = auth.find_user_by_email("alice@example.com").await?.unwrap();
+    /// // caller must verify password via PasswordHasher before this point
+    /// let (user, session) = auth.login(&user, SessionMeta::default()).await?;
+    /// ```
+    pub async fn login(
+        &self,
+        user: &AuthUser,
+        meta: SessionMeta,
+    ) -> Result<(AuthUser, Session), AuthError> {
+        let session = self.create_session(user, meta).await?;
+        Ok((user.clone(), session))
+    }
+
+    /// Look up a user by email address.
+    ///
+    /// Returns `Ok(None)` when no user with that email exists.
+    pub async fn find_user_by_email(
+        &self,
+        email: &str,
+    ) -> Result<Option<AuthUser>, AuthError> {
+        self.user_provider
+            .find_user_by_email(email)
+            .await
+            .map_err(|e| AuthError::Provider(Box::new(e)))
+    }
+
+    /// Mark a user's email address as verified and persist the change.
+    ///
+    /// # Errors
+    /// Returns [`AuthError::UserNotFound`] if no user with `user_id` exists.
+    pub async fn verify_email(&self, user_id: &str) -> Result<AuthUser, AuthError> {
+        let mut user = self
+            .user_provider
+            .find_user_by_id(user_id)
+            .await
+            .map_err(|e| AuthError::Provider(Box::new(e)))?
+            .ok_or(AuthError::UserNotFound)?;
+
+        user.email_verified = true;
+
+        self.user_provider
+            .update_user(user)
+            .await
+            .map_err(|e| AuthError::Provider(Box::new(e)))
+    }
+
+    /// Replace a user's role list and persist the change.
+    ///
+    /// Overwrites the existing roles entirely — combine with
+    /// [`AuthUser::add_role`] / [`AuthUser::remove_role`] if you need
+    /// incremental mutations.
+    ///
+    /// # Errors
+    /// Returns [`AuthError::UserNotFound`] if no user with `user_id` exists.
+    pub async fn set_user_roles(
+        &self,
+        user_id: &str,
+        roles: Vec<Role>,
+    ) -> Result<AuthUser, AuthError> {
+        let mut user = self
+            .user_provider
+            .find_user_by_id(user_id)
+            .await
+            .map_err(|e| AuthError::Provider(Box::new(e)))?
+            .ok_or(AuthError::UserNotFound)?;
+
+        user.roles = roles;
+
+        self.user_provider
+            .update_user(user)
+            .await
+            .map_err(|e| AuthError::Provider(Box::new(e)))
+    }
+
+    /// Rotate a session: revoke the current token and issue a fresh one with
+    /// the same metadata and a new TTL window.
+    ///
+    /// This implements token rotation — the old token becomes invalid
+    /// immediately, mitigating replay attacks. Suitable for "remember me"
+    /// refresh flows.
+    ///
+    /// # Errors
+    /// Returns [`AuthError::SessionInvalid`] if the token is unknown or expired.
+    pub async fn refresh_session(&self, token: &str) -> Result<Session, AuthError> {
+        let old = self.validate_session(token).await?;
+
+        // Revoke the old token first (token rotation).
+        self.session_provider
+            .revoke_session(token)
+            .await
+            .map_err(|e| AuthError::Provider(Box::new(e)))?;
+
+        let meta = SessionMeta {
+            ip_address: old.ip_address.clone(),
+            user_agent: old.user_agent.clone(),
+        };
+        let expires_at = now_secs() + self.config.session_ttl_secs;
+
+        self.session_provider
+            .create_session(&old.user_id, expires_at, meta)
+            .await
+            .map_err(|e| AuthError::Provider(Box::new(e)))
+    }
+
+    /// Assert that `user` holds `role`, returning [`AuthError::Forbidden`] if not.
+    ///
+    /// Use this in request handlers or service methods to enforce role-based
+    /// access control in one line:
+    ///
+    /// ```rust,ignore
+    /// auth.require_role(&user, &Role::Admin)?;
+    /// ```
+    pub fn require_role(&self, user: &AuthUser, role: &Role) -> Result<(), AuthError> {
+        if user.has_role(role) {
+            Ok(())
+        } else {
+            Err(AuthError::Forbidden(format!(
+                "role '{}' is required",
+                role
+            )))
+        }
+    }
+
     /// Convenience: check whether `user` holds the given `role`.
     pub fn has_role(user: &AuthUser, role: &Role) -> bool {
         user.roles.contains(role)

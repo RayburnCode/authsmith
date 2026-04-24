@@ -72,6 +72,7 @@ impl AuthProvider for MemoryUserStore {
             id: next_id(&self.counter),
             email: input.email,
             peer_id: input.peer_id,
+            tenant_id: input.tenant_id,
             roles: input.roles,
             metadata: input.metadata,
             email_verified: false,
@@ -136,6 +137,7 @@ impl SessionProvider for MemorySessionStore {
             ip_address: meta.ip_address,
             user_agent: meta.user_agent,
             created_at: now_secs(),
+            tenant_id: None,
         };
         self.sessions
             .lock()
@@ -159,6 +161,17 @@ impl SessionProvider for MemorySessionStore {
             .unwrap()
             .retain(|_, s| s.user_id != user_id);
         Ok(())
+    }
+
+    async fn list_sessions_for_user(&self, user_id: &str) -> Result<Vec<Session>, Self::Error> {
+        Ok(self
+            .sessions
+            .lock()
+            .unwrap()
+            .values()
+            .filter(|s| s.user_id == user_id)
+            .cloned()
+            .collect())
     }
 }
 

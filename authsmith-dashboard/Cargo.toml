@@ -1,0 +1,33 @@
+[package]
+name        = "authsmith-dashboard"
+description = "Admin dashboard for AuthSmith — manage users, sessions, and audit logs via an egui UI"
+version.workspace   = true
+edition.workspace   = true
+license.workspace   = true
+repository.workspace = true
+homepage.workspace  = true
+
+[[bin]]
+name = "authsmith-dashboard"
+path = "src/main.rs"
+
+[dependencies]
+# GUI — update these to the latest compatible egui/eframe versions as needed
+eframe = { version = "0.31", default-features = false, features = [
+    "default_fonts",
+    "glow",          # OpenGL renderer (works on all platforms)
+] }
+egui = "0.31"
+
+# HTTP client (plain HTTP is enough for localhost dev; add "native-tls" or
+# "rustls-tls" for HTTPS production deployments)
+reqwest  = { workspace = true }
+
+# Shared with workspace
+serde      = { workspace = true }
+serde_json = { workspace = true }
+tokio      = { workspace = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Desktop-only: needed for the tokio runtime embedded in the app
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }

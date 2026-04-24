@@ -32,7 +32,6 @@
 //! ```
 
 use authsmith_core::{AuthEngine, AuthProvider, AuthUser, Role, SessionProvider};
-use authsmith_session::tokens_equal;
 use axum::{
     extract::{FromRequestParts, Request, State},
     http::{request::Parts, HeaderMap, StatusCode},
@@ -56,25 +55,22 @@ pub const SESSION_COOKIE: &str = "authsmith_session";
 /// Extract a raw session token from the `Cookie` header or `Authorization: Bearer`.
 ///
 /// Prefers the cookie (browser clients); falls back to Bearer (API / mobile clients).
+/// Delegates to [`authsmith_core::http`] for the parsing logic so the same
+/// rules apply regardless of which HTTP framework is in use.
 pub fn extract_token(headers: &HeaderMap) -> Option<String> {
-    // 1. Cookie header
+    // 1. Cookie header — preferred for browser clients.
     if let Some(val) = headers.get(http::header::COOKIE) {
         if let Ok(s) = val.to_str() {
-            for pair in s.split(';') {
-                let mut kv = pair.trim().splitn(2, '=');
-                if let (Some(k), Some(v)) = (kv.next(), kv.next()) {
-                    if tokens_equal(k.trim(), SESSION_COOKIE) {
-                        return Some(v.trim().to_owned());
-                    }
-                }
+            if let Some(tok) = authsmith_core::http::extract_cookie(s, SESSION_COOKIE) {
+                return Some(tok);
             }
         }
     }
-    // 2. Authorization: Bearer <token>
+    // 2. Authorization: Bearer <token> — for API / mobile clients.
     if let Some(val) = headers.get(http::header::AUTHORIZATION) {
         if let Ok(s) = val.to_str() {
-            if let Some(token) = s.strip_prefix("Bearer ") {
-                return Some(token.trim().to_owned());
+            if let Some(tok) = authsmith_core::http::extract_bearer_token(s) {
+                return Some(tok.to_owned());
             }
         }
     }

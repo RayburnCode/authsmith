@@ -2,11 +2,13 @@
 members = [
     "authsmith-core",
     "authsmith-password",
-    "authsmith-session",
     "authsmith-oauth",
     "authsmith-p2p",
     "authsmith-axum",
     "authsmith-db",
+    "authsmith-notify",
+    "authsmith-dashboard",
+    "examples/basic-axum",
 ]
 resolver = "2"
 
@@ -24,7 +26,7 @@ categories = ["web-programming", "authentication", "network-programming"]
 # Internal crates
 authsmith-core     = { path = "authsmith-core" }
 authsmith-password = { path = "authsmith-password" }
-authsmith-session  = { path = "authsmith-session" }
+authsmith-notify   = { path = "authsmith-notify" }
 
 # Serialization
 serde       = { version = "1",   features = ["derive"] }
@@ -54,3 +56,6 @@ sqlx        = { version = "0.8", features = ["runtime-tokio", "macros", "chrono"
 # OAuth
 oauth2      = "4"
 reqwest     = { version = "0.12", features = ["json"], default-features = false }
+
+# Email
+lettre      = { version = "0.11.21", features = ["tokio1-native-tls", "smtp-transport", "builder"] }

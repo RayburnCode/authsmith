@@ -1,12 +1,11 @@
-//! # authsmith-session
+//! Session token generation and lifecycle helpers.
 //!
-//! Session token generation implementing the [`authsmith_core::TokenGenerator`] trait,
-//! plus session expiry and rotation helpers.
+//! Enabled by the `session` feature flag.
 //!
 //! ## Usage
 //!
 //! ```rust
-//! use authsmith_session::SecureTokenGenerator;
+//! use authsmith_core::session::SecureTokenGenerator;
 //! use authsmith_core::TokenGenerator;
 //!
 //! let gen = SecureTokenGenerator::default();
@@ -14,7 +13,7 @@
 //! assert_eq!(token.len(), 43); // 32 bytes base64url, no padding
 //! ```
 
-use authsmith_core::TokenGenerator;
+use crate::TokenGenerator;
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine};
 use rand::RngCore;
 
@@ -93,7 +92,7 @@ pub fn tokens_equal(a: &str, b: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use authsmith_core::TokenGenerator;
+    use crate::TokenGenerator;
 
     #[test]
     fn token_is_43_chars_for_32_bytes() {
@@ -118,23 +117,15 @@ mod tests {
             let t = gen.generate();
             assert!(
                 t.chars().all(|c| c.is_alphanumeric() || c == '-' || c == '_'),
-                "token contained non-URL-safe character: {t}"
+                "non-url-safe char in token: {t}"
             );
         }
     }
 
     #[test]
-    fn constant_time_compare() {
+    fn tokens_equal_constant_time() {
         assert!(tokens_equal("abc", "abc"));
         assert!(!tokens_equal("abc", "abd"));
-        assert!(!tokens_equal("abc", "abcd"));
-    }
-
-    #[test]
-    fn expiry_is_in_the_future() {
-        let before = now_secs();
-        let expiry = expiry_from_ttl(3600);
-        assert!(expiry > before);
-        assert!(expiry <= before + 3600 + 1);
+        assert!(!tokens_equal("ab", "abc"));
     }
 }

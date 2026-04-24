@@ -39,7 +39,7 @@ mod inner {
         AuthProvider, AuthUser, CreateUserInput, Role, Session, SessionMeta, SessionProvider,
         TokenGenerator,
     };
-    use authsmith_session::{now_secs, SecureTokenGenerator};
+    use authsmith_core::session::{now_secs, SecureTokenGenerator};
     use sqlx::SqlitePool;
     use tracing::instrument;
 

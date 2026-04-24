@@ -9,8 +9,7 @@ homepage.workspace   = true
 readme.workspace     = true
 
 [dependencies]
-authsmith-core    = { workspace = true }
-authsmith-session = { workspace = true }
+authsmith-core    = { workspace = true, features = ["session"] }
 thiserror         = { workspace = true }
 serde             = { workspace = true }
 serde_json        = { workspace = true }

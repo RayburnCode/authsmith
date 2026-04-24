@@ -1,0 +1,35 @@
+[package]
+name    = "basic-axum"
+description = "Full-stack AuthSmith example: Axum + Argon2 + email plugin + webhook plugin"
+version.workspace = true
+edition           = "2021"
+publish           = false
+
+[[bin]]
+name = "basic-axum"
+path = "src/main.rs"
+
+[dependencies]
+# AuthSmith workspace crates
+authsmith-core     = { workspace = true, features = ["session"] }
+authsmith-password = { workspace = true }
+authsmith-axum     = { path = "../../authsmith-axum" }
+authsmith-notify   = { workspace = true, features = ["smtp", "webhook"] }
+
+# hooksmith-core is needed to implement WebhookSender for the noop sender.
+# In production you would use AuthWebhookSender from authsmith-notify directly.
+hooksmith-core = "0.1.5"
+
+# Web framework
+axum  = { workspace = true }
+tokio = { workspace = true }
+
+# Serialization
+serde      = { workspace = true }
+serde_json = { workspace = true }
+
+# Utilities
+thiserror          = { workspace = true }
+async-trait        = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = "0.3"
