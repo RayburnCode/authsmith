@@ -1,0 +1,27 @@
+[package]
+name        = "authsmith-oauth"
+description = "OAuth2 / OIDC provider integrations for AuthSmith"
+version.workspace    = true
+edition              = "2021"
+license.workspace    = true
+repository.workspace = true
+homepage.workspace   = true
+readme.workspace     = true
+
+[dependencies]
+authsmith-core = { workspace = true }
+thiserror      = { workspace = true }
+serde          = { workspace = true }
+serde_json     = { workspace = true }
+async-trait    = { workspace = true }
+# oauth2 and reqwest are gated so the crate can compile without them
+# until the feature is fully wired.
+
+[features]
+default  = []
+# Enable to pull in the oauth2 + reqwest crates and activate the provider impls.
+# providers = ["dep:oauth2", "dep:reqwest"]
+
+# [dependencies]
+# oauth2  = { workspace = true, optional = true }
+# reqwest = { workspace = true, optional = true, features = ["rustls-tls"] }

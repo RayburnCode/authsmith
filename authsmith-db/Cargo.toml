@@ -1,0 +1,25 @@
+[package]
+name        = "authsmith-db"
+description = "Database adapters (SQLite, Postgres) for AuthSmith"
+version.workspace    = true
+edition              = "2021"
+license.workspace    = true
+repository.workspace = true
+homepage.workspace   = true
+readme.workspace     = true
+
+[dependencies]
+authsmith-core    = { workspace = true }
+authsmith-session = { workspace = true }
+thiserror         = { workspace = true }
+serde             = { workspace = true }
+serde_json        = { workspace = true }
+async-trait       = { workspace = true }
+tokio             = { workspace = true }
+tracing           = { workspace = true }
+sqlx              = { workspace = true }
+
+[features]
+default  = []
+sqlite   = ["sqlx/sqlite"]
+postgres = ["sqlx/postgres"]

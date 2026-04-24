@@ -1,0 +1,16 @@
+[package]
+name        = "authsmith-password"
+description = "Argon2 password hashing for AuthSmith"
+version.workspace    = true
+edition              = "2021"
+license.workspace    = true
+repository.workspace = true
+homepage.workspace   = true
+readme.workspace     = true
+
+[dependencies]
+authsmith-core = { workspace = true }
+argon2         = { workspace = true }
+thiserror      = { workspace = true }
+secrecy        = { workspace = true }
+rand_core      = { version = "0.6", features = ["getrandom"] }

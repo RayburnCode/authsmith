@@ -1,0 +1,23 @@
+[package]
+name        = "authsmith-p2p"
+description = "libp2p keypair peer identity for AuthSmith"
+version.workspace    = true
+edition              = "2021"
+license.workspace    = true
+repository.workspace = true
+homepage.workspace   = true
+readme.workspace     = true
+
+[dependencies]
+authsmith-core = { workspace = true }
+thiserror      = { workspace = true }
+serde          = { workspace = true }
+async-trait    = { workspace = true }
+
+# libp2p is gated behind a feature to keep compile times low until ready.
+[features]
+default = []
+# p2p = ["dep:libp2p"]
+
+# [dependencies]
+# libp2p = { version = "0.54", optional = true, features = ["identify", "noise", "tcp", "yamux", "gossipsub"] }

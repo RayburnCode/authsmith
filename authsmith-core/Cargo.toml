@@ -1,0 +1,28 @@
+[package]
+name        = "authsmith-core"
+description = "Core traits, types, and engine for the AuthSmith authentication framework"
+version.workspace     = true
+edition               = "2021"
+license.workspace     = true
+repository.workspace  = true
+homepage.workspace    = true
+readme.workspace      = true
+
+# authsmith-core must stay WASM-compatible — NO sqlx, axum, tokio, etc.
+[dependencies]
+serde       = { workspace = true }
+serde_json  = { workspace = true }
+thiserror   = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tokio     = { workspace = true }
+thiserror = { workspace = true }
+
+[[example]]
+name = "realtor"
+path = "example/realtor.rs"
+
+[features]
+# No features enabled by default — consumers opt in explicitly.
+default = []

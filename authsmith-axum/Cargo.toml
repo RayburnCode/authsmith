@@ -1,0 +1,20 @@
+[package]
+name        = "authsmith-axum"
+description = "Axum extractors and middleware for AuthSmith"
+version.workspace    = true
+edition              = "2021"
+license.workspace    = true
+repository.workspace = true
+homepage.workspace   = true
+readme.workspace     = true
+
+[dependencies]
+authsmith-core    = { workspace = true }
+authsmith-session = { workspace = true }
+axum              = { workspace = true }
+http              = { workspace = true }
+thiserror         = { workspace = true }
+serde             = { workspace = true }
+async-trait       = { workspace = true }
+tokio             = { workspace = true }
+tracing           = { workspace = true }
