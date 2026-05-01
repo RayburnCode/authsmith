@@ -42,6 +42,7 @@ use axum::{
     http::{request::Parts, HeaderMap, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
+    Router,
 };
 use std::sync::Arc;
 use tracing::instrument;
@@ -193,6 +194,78 @@ impl IntoResponse for AuthRejection {
                 (StatusCode::FORBIDDEN, "insufficient role").into_response()
             }
         }
+    }
+}
+
+// ── Router integration helpers ────────────────────────────────────────────────
+
+/// Attach auth middleware and state to a router in one call, returning a
+/// fully-wired `Router<()>` ready to serve.
+///
+/// This is the recommended way to integrate AuthSmith into an Axum app when
+/// `SharedAuth<U, S>` is the sole router state. If your app needs additional
+/// state, use `Router::merge` or apply [`auth_middleware`] manually.
+///
+/// # Example
+/// ```rust,ignore
+/// use authsmith_axum::{mount_authsmith, AuthSession};
+/// use axum::{routing::get, Router};
+///
+/// let routes = Router::new()
+///     .route("/me", get(me_handler));
+///
+/// let app = mount_authsmith(routes, engine);
+///
+/// async fn me_handler(AuthSession(user): AuthSession) -> String {
+///     user.email.unwrap_or_default()
+/// }
+/// ```
+pub fn mount_authsmith<U, S>(
+    routes: Router<SharedAuth<U, S>>,
+    auth: AuthEngine<U, S>,
+) -> Router<()>
+where
+    U: AuthProvider + Clone + 'static,
+    S: SessionProvider + Clone + 'static,
+{
+    let shared = Arc::new(auth);
+    routes
+        .layer(axum::middleware::from_fn_with_state(
+            shared.clone(),
+            auth_middleware::<U, S>,
+        ))
+        .with_state(shared)
+}
+
+/// Extension trait that adds a `.with_authsmith(engine)` method to
+/// `Router<SharedAuth<U, S>>`.
+///
+/// # Example
+/// ```rust,ignore
+/// use authsmith_axum::{RouterExt, SharedAuth, AuthSession};
+/// use axum::{routing::get, Router};
+///
+/// let app: Router<()> = Router::<SharedAuth<MyUsers, MySessions>>::new()
+///     .route("/me", get(me_handler))
+///     .with_authsmith(engine);
+/// ```
+pub trait RouterExt<U, S>
+where
+    U: AuthProvider + Clone + 'static,
+    S: SessionProvider + Clone + 'static,
+{
+    /// Wire up auth middleware and state, consuming the router and returning
+    /// a `Router<()>` ready to pass to `axum::serve`.
+    fn with_authsmith(self, auth: AuthEngine<U, S>) -> Router<()>;
+}
+
+impl<U, S> RouterExt<U, S> for Router<SharedAuth<U, S>>
+where
+    U: AuthProvider + Clone + 'static,
+    S: SessionProvider + Clone + 'static,
+{
+    fn with_authsmith(self, auth: AuthEngine<U, S>) -> Router<()> {
+        mount_authsmith(self, auth)
     }
 }
 

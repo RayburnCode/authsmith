@@ -1,0 +1,65 @@
+[package]
+name        = "authsmith"
+description = "All-in-one re-export crate for the AuthSmith authentication framework"
+version.workspace    = true
+edition              = "2021"
+license.workspace    = true
+repository.workspace = true
+homepage.workspace   = true
+readme.workspace     = true
+
+# ── Feature flags ──────────────────────────────────────────────────────────────
+#
+# Enable only what your project needs. Every feature pulls in the matching
+# sub-crate and re-exports its public API under the `authsmith::` namespace.
+#
+# Example Cargo.toml:
+#   [dependencies]
+#   authsmith = { version = "0.1", features = ["axum", "postgres", "password", "smtp"] }
+
+[features]
+default = []
+
+# Framework adapters
+axum        = ["dep:authsmith-axum"]
+
+# Database backends
+postgres    = ["dep:authsmith-db", "authsmith-db/postgres"]
+sqlite      = ["dep:authsmith-db", "authsmith-db/sqlite"]
+
+# Password hashing
+password    = ["dep:authsmith-password"]
+
+# Notification plugins
+smtp        = ["dep:authsmith-notify", "authsmith-notify/smtp"]
+webhook     = ["dep:authsmith-notify", "authsmith-notify/webhook"]
+
+# Planned crates (kept gated so they don't add compile cost until ready)
+oauth       = ["dep:authsmith-oauth"]
+p2p         = ["dep:authsmith-p2p"]
+
+# Macros
+macros      = ["dep:authsmith-macros"]
+
+# Kitchen-sink — enable everything stable
+full        = [
+    "axum",
+    "postgres",
+    "password",
+    "smtp",
+    "webhook",
+    "macros",
+]
+
+[dependencies]
+# Always present — zero-cost core types and traits
+authsmith-core     = { workspace = true, features = ["session"] }
+
+# Optional sub-crates
+authsmith-axum     = { path = "../authsmith-axum",     optional = true }
+authsmith-db       = { path = "../authsmith-db",       optional = true }
+authsmith-password = { path = "../authsmith-password", optional = true }
+authsmith-notify   = { path = "../authsmith-notify",   optional = true }
+authsmith-oauth    = { path = "../authsmith-oauth",    optional = true }
+authsmith-p2p      = { path = "../authsmith-p2p",      optional = true }
+authsmith-macros   = { path = "../authsmith-macros",   optional = true }

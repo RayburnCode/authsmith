@@ -1,5 +1,6 @@
 [workspace]
 members = [
+    "authsmith",
     "authsmith-core",
     "authsmith-password",
     "authsmith-oauth",
@@ -7,8 +8,11 @@ members = [
     "authsmith-axum",
     "authsmith-db",
     "authsmith-notify",
+    "authsmith-macros",
     "authsmith-dashboard",
     "examples/basic-axum",
+    "examples/postgres-axum",
+    "examples/multi-tenant",
 ]
 resolver = "2"
 
@@ -27,6 +31,7 @@ categories = ["web-programming", "authentication", "network-programming"]
 authsmith-core     = { path = "authsmith-core" }
 authsmith-password = { path = "authsmith-password" }
 authsmith-notify   = { path = "authsmith-notify" }
+authsmith-macros   = { path = "authsmith-macros" }
 
 # Serialization
 serde       = { version = "1",   features = ["derive"] }
@@ -56,6 +61,14 @@ sqlx        = { version = "0.8", features = ["runtime-tokio", "macros", "chrono"
 # OAuth
 oauth2      = "4"
 reqwest     = { version = "0.12", features = ["json"], default-features = false }
+
+# Proc-macro helpers
+syn         = { version = "2", features = ["full"] }
+quote       = "1"
+proc-macro2 = "1"
+
+# Misc
+anyhow = "1"
 
 # Email
 lettre      = { version = "0.11.21", features = ["tokio1-native-tls", "smtp-transport", "builder"] }

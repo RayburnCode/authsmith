@@ -125,4 +125,116 @@ pub async fn run_postgres_migrations(
     pool: &sqlx::PgPool,
 ) -> Result<(), sqlx::migrate::MigrateError> {
     sqlx::migrate!("./migrations/postgres").run(pool).await
-} 
+}
+
+// ── Convenience engine builders ───────────────────────────────────────────────
+
+/// Create an [`AuthEngineBuilder`] pre-wired with Postgres user and session
+/// stores backed by `pool`.
+///
+/// This condenses the three-line setup into one call. Migrations are **not**
+/// run automatically — call [`run_postgres_migrations`] before building.
+///
+/// # Example
+/// ```rust,ignore
+/// use authsmith_db::{pg_engine_builder, run_postgres_migrations};
+///
+/// let pool = sqlx::PgPool::connect(&std::env::var("DATABASE_URL")?).await?;
+/// run_postgres_migrations(&pool).await?;
+///
+/// let auth = pg_engine_builder(pool)
+///     .config(AuthConfig::from_env())
+///     .build()?;
+/// ```
+#[cfg(feature = "postgres")]
+pub fn pg_engine_builder(
+    pool: sqlx::PgPool,
+) -> authsmith_core::AuthEngineBuilder<
+    postgres::PgUserStore,
+    postgres::PgSessionStore,
+> {
+    use postgres::{PgSessionStore, PgUserStore};
+    authsmith_core::AuthEngine::builder()
+        .user_provider(PgUserStore::new(pool.clone()))
+        .session_provider(PgSessionStore::new(pool))
+}
+
+/// Run Postgres migrations **and** return a pre-wired [`AuthEngineBuilder`]
+/// in a single async call.
+///
+/// # Example
+/// ```rust,ignore
+/// use authsmith_db::pg_setup;
+///
+/// let auth = pg_setup(&pool).await?
+///     .config(AuthConfig::from_env())
+///     .build()?;
+/// ```
+#[cfg(feature = "postgres")]
+pub async fn pg_setup(
+    pool: &sqlx::PgPool,
+) -> Result<
+    authsmith_core::AuthEngineBuilder<
+        postgres::PgUserStore,
+        postgres::PgSessionStore,
+    >,
+    sqlx::migrate::MigrateError,
+> {
+    run_postgres_migrations(pool).await?;
+    Ok(pg_engine_builder(pool.clone()))
+}
+
+/// Create an [`AuthEngineBuilder`] pre-wired with SQLite user and session
+/// stores backed by `pool`.
+///
+/// This condenses the three-line setup into one call. Migrations are **not**
+/// run automatically — call [`run_sqlite_migrations`] before building.
+///
+/// # Example
+/// ```rust,ignore
+/// use authsmith_db::{sqlite_engine_builder, run_sqlite_migrations};
+///
+/// let pool = sqlx::SqlitePool::connect("sqlite://auth.db").await?;
+/// run_sqlite_migrations(&pool).await?;
+///
+/// let auth = sqlite_engine_builder(pool)
+///     .config(AuthConfig::from_env())
+///     .build()?;
+/// ```
+#[cfg(feature = "sqlite")]
+pub fn sqlite_engine_builder(
+    pool: sqlx::SqlitePool,
+) -> authsmith_core::AuthEngineBuilder<
+    sqlite::SqliteUserStore,
+    sqlite::SqliteSessionStore,
+> {
+    use sqlite::{SqliteSessionStore, SqliteUserStore};
+    authsmith_core::AuthEngine::builder()
+        .user_provider(SqliteUserStore::new(pool.clone()))
+        .session_provider(SqliteSessionStore::new(pool))
+}
+
+/// Run SQLite migrations **and** return a pre-wired [`AuthEngineBuilder`]
+/// in a single async call.
+///
+/// # Example
+/// ```rust,ignore
+/// use authsmith_db::sqlite_setup;
+///
+/// let auth = sqlite_setup(&pool).await?
+///     .config(AuthConfig::from_env())
+///     .build()?;
+/// ```
+#[cfg(feature = "sqlite")]
+pub async fn sqlite_setup(
+    pool: &sqlx::SqlitePool,
+) -> Result<
+    authsmith_core::AuthEngineBuilder<
+        sqlite::SqliteUserStore,
+        sqlite::SqliteSessionStore,
+    >,
+    sqlx::migrate::MigrateError,
+> {
+    run_sqlite_migrations(pool).await?;
+    Ok(sqlite_engine_builder(pool.clone()))
+}

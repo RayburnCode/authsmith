@@ -1,0 +1,18 @@
+[package]
+name        = "authsmith-macros"
+description = "Proc-macro helpers for the AuthSmith authentication framework"
+version.workspace    = true
+edition              = "2021"
+license.workspace    = true
+repository.workspace = true
+homepage.workspace   = true
+readme.workspace     = true
+
+# proc-macro crates MUST declare this
+[lib]
+proc-macro = true
+
+[dependencies]
+syn    = { version = "2", features = ["full"] }
+quote  = "1"
+proc-macro2 = "1"

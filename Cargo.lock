@@ -77,6 +77,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.102"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7f202df86484c868dbad7eaa557ef785d5c66295e41b460ef922eca0723b842c"
+
+[[package]]
 name = "arboard"
 version = "3.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -135,6 +141,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
+name = "authsmith"
+version = "0.1.0"
+dependencies = [
+ "authsmith-axum",
+ "authsmith-core",
+ "authsmith-db",
+ "authsmith-macros",
+ "authsmith-notify",
+ "authsmith-oauth",
+ "authsmith-p2p",
+ "authsmith-password",
+]
+
+[[package]]
 name = "authsmith-axum"
 version = "0.1.0"
 dependencies = [
@@ -186,6 +206,15 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "authsmith-macros"
+version = "0.1.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn",
 ]
 
 [[package]]
@@ -1904,6 +1933,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "multi-tenant"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "authsmith-axum",
+ "authsmith-core",
+ "authsmith-password",
+ "axum",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "native-tls"
 version = "0.2.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2521,6 +2567,25 @@ dependencies = [
  "pin-project-lite",
  "rustix 1.1.4",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "postgres-axum"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "authsmith-axum",
+ "authsmith-core",
+ "authsmith-db",
+ "authsmith-password",
+ "axum",
+ "serde",
+ "serde_json",
+ "sqlx",
+ "thiserror 2.0.18",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]

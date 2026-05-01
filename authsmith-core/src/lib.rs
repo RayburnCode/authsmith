@@ -414,6 +414,45 @@ impl AuthConfig {
     pub fn builder() -> AuthConfigBuilder {
         AuthConfigBuilder::default()
     }
+
+    /// Build an [`AuthConfig`] from environment variables, falling back to
+    /// [`AuthConfig::default()`] for any variable that is absent or unparseable.
+    ///
+    /// | Environment variable              | Field                       | Example   |
+    /// |-----------------------------------|-----------------------------|-----------|
+    /// | `AUTH_SESSION_TTL`                | `session_ttl_secs`          | `3600`    |
+    /// | `AUTH_REQUIRE_EMAIL_VERIFICATION` | `require_email_verification`| `true`    |
+    /// | `AUTH_PASSWORD_MIN_LENGTH`        | `password_min_length`       | `10`      |
+    /// | `AUTH_PASSWORD_MAX_LENGTH`        | `password_max_length`       | `256`     |
+    ///
+    /// # Example
+    /// ```rust,ignore
+    /// // In your .env or process environment:
+    /// // AUTH_SESSION_TTL=3600
+    /// // AUTH_REQUIRE_EMAIL_VERIFICATION=true
+    /// let config = AuthConfig::from_env();
+    /// ```
+    pub fn from_env() -> Self {
+        let default = Self::default();
+        Self {
+            session_ttl_secs: std::env::var("AUTH_SESSION_TTL")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default.session_ttl_secs),
+            require_email_verification: std::env::var("AUTH_REQUIRE_EMAIL_VERIFICATION")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default.require_email_verification),
+            password_min_length: std::env::var("AUTH_PASSWORD_MIN_LENGTH")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default.password_min_length),
+            password_max_length: std::env::var("AUTH_PASSWORD_MAX_LENGTH")
+                .ok()
+                .and_then(|v| v.parse().ok())
+                .unwrap_or(default.password_max_length),
+        }
+    }
 }
 
 /// Fluent builder for [`AuthConfig`].
@@ -872,6 +911,7 @@ mod tests {
             roles: vec![Role::Realtor],
             metadata: serde_json::Value::Null,
             email_verified: false,
+            banned: false,
             created_at: 0,
             updated_at: 0,
         };
@@ -899,6 +939,7 @@ mod tests {
             roles: vec![],
             metadata: serde_json::Value::Null,
             email_verified: false,
+            banned: false,
             created_at: 0,
             updated_at: 0,
         };

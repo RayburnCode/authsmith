@@ -1,0 +1,35 @@
+[package]
+name    = "postgres-axum"
+description = "Production AuthSmith example: Postgres + Axum using the authsmith umbrella crate"
+version.workspace = true
+edition           = "2021"
+publish           = false
+
+[[bin]]
+name = "postgres-axum"
+path = "src/main.rs"
+
+[dependencies]
+# ── In a real project you only need this one line ──────────────────────────────
+# authsmith = { version = "0.1", features = ["axum", "postgres", "password"] }
+#
+# Within this workspace we reference the crates by path:
+authsmith-core     = { workspace = true, features = ["session"] }
+authsmith-axum     = { path = "../../authsmith-axum" }
+authsmith-db       = { path = "../../authsmith-db", features = ["postgres"] }
+authsmith-password = { workspace = true }
+
+# Web + async
+axum  = { workspace = true }
+sqlx  = { workspace = true }
+tokio = { workspace = true }
+
+# Serialization
+serde      = { workspace = true }
+serde_json = { workspace = true }
+
+# Utilities
+thiserror          = { workspace = true }
+tracing            = { workspace = true }
+tracing-subscriber = "0.3"
+anyhow             = { workspace = true }

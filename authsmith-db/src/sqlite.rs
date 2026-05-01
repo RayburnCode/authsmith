@@ -131,6 +131,25 @@ mod inner {
         pub fn new(pool: SqlitePool) -> Self {
             Self { pool }
         }
+
+        /// Fetch the stored Argon2 password hash for the given email.
+        ///
+        /// Returns `None` if the user does not exist or has no password (e.g.
+        /// OAuth-only accounts). Use this in your login handler to verify the
+        /// raw password against the stored hash via a [`PasswordHasher`].
+        ///
+        /// [`PasswordHasher`]: authsmith_core::PasswordHasher
+        pub async fn find_password_hash_by_email(
+            &self,
+            email: &str,
+        ) -> Result<Option<String>, SqliteError> {
+            let row: Option<(Option<String>,)> =
+                sqlx::query_as("SELECT password_hash FROM users WHERE email = ?")
+                    .bind(email)
+                    .fetch_optional(&self.pool)
+                    .await?;
+            Ok(row.and_then(|(h,)| h))
+        }
     }
 
     #[async_trait]
@@ -146,13 +165,14 @@ mod inner {
 
             sqlx::query(
                 "INSERT INTO users \
-                    (id, email, peer_id, tenant_id, roles, metadata, email_verified, created_at, updated_at) \
-                 VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
+                    (id, email, peer_id, tenant_id, password_hash, roles, metadata, email_verified, created_at, updated_at) \
+                 VALUES (?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
             )
             .bind(&id)
             .bind(&input.email)
             .bind(&input.peer_id)
             .bind(&input.tenant_id)
+            .bind(&input.password_hash)
             .bind(&roles_json)
             .bind(&metadata_json)
             .bind(now)

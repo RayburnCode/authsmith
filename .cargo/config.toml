@@ -1,0 +1,19 @@
+[profile.release]
+# 1. Optimize for speed (default is 3, "s" or "z" for size)
+opt-level = "z"
+
+# 2. Enable Link Time Optimization (LTO)
+# "fat" is best for maximum performance, "thin" is a good balance
+lto = "fat"
+
+# 3. Reduce parallel code generation units to 1 for better optimizations
+codegen-units = 1
+
+# 4. Abort on panic to reduce binary size and improve performance
+panic = "abort"
+
+# 5. Strip symbols from the binary to reduce size (requires Rust 1.59+)
+strip = true
+
+# 6. Optional: Optimize for size ("s") or aggressive size ("z")
+# opt-level = "s"
